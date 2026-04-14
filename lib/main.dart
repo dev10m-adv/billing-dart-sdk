@@ -33,8 +33,13 @@ class BillingExamplePage extends StatefulWidget {
 class _BillingExamplePageState extends State<BillingExamplePage> {
   final TextEditingController _tokenController = TextEditingController();
   final TextEditingController _authTokenController = TextEditingController();
+  final TextEditingController _payingPartyIdController =
+      TextEditingController();
   final TextEditingController _publicKeyPathController =
       TextEditingController();
+  final TextEditingController _billingBaseUrlController = TextEditingController(
+    text: _defaultBillingBaseUrl,
+  );
   bool _syncing = false;
   String? _savedToken;
   static const _defaultBillingBaseUrl = 'http://localhost:3000';
@@ -50,13 +55,16 @@ class _BillingExamplePageState extends State<BillingExamplePage> {
   }
 
   Future<void> _initSdk() async {
+    final baseUrl = _billingBaseUrlController.text.trim().isEmpty
+        ? _defaultBillingBaseUrl
+        : _billingBaseUrlController.text.trim();
     debugPrint(
       '[BillingExample] Init: configuring SDK with asset $_publicKeyAsset…',
     );
 
     try {
       await BillingSdk.configureWithAsset(
-        billingApiBaseUrl: _defaultBillingBaseUrl,
+        billingApiBaseUrl: baseUrl,
         publicKeyAsset: _publicKeyAsset,
       );
 
@@ -74,11 +82,11 @@ class _BillingExamplePageState extends State<BillingExamplePage> {
       }
     } on FormatException catch (e) {
       debugPrint('[BillingExample] Init: asset invalid — ${e.message}');
-      BillingSdk.configure(billingApiBaseUrl: _defaultBillingBaseUrl);
+      BillingSdk.configure(billingApiBaseUrl: baseUrl);
     } catch (e, st) {
       debugPrint('[BillingExample] Init: asset load failed — $e');
       debugPrint(st.toString());
-      BillingSdk.configure(billingApiBaseUrl: _defaultBillingBaseUrl);
+      BillingSdk.configure(billingApiBaseUrl: baseUrl);
     }
 
     debugPrint(
@@ -112,6 +120,9 @@ class _BillingExamplePageState extends State<BillingExamplePage> {
   void _onPasteVerify() {
     final pasted = _tokenController.text.trim();
     final path = _publicKeyPathController.text.trim();
+    final baseUrl = _billingBaseUrlController.text.trim().isEmpty
+        ? _defaultBillingBaseUrl
+        : _billingBaseUrlController.text.trim();
     debugPrint(
       '[BillingExample] Paste+Verify: input length=${pasted.length}, publicKeyPath=${path.isEmpty ? "none" : path}',
     );
@@ -122,10 +133,7 @@ class _BillingExamplePageState extends State<BillingExamplePage> {
     }
     if (path.isNotEmpty) {
       try {
-        BillingSdk.configure(
-          billingApiBaseUrl: _defaultBillingBaseUrl,
-          publicKeyPath: path,
-        );
+        BillingSdk.configure(billingApiBaseUrl: baseUrl, publicKeyPath: path);
         debugPrint(
           '[BillingExample] Paste+Verify: configured with public key from path',
         );
@@ -165,15 +173,23 @@ class _BillingExamplePageState extends State<BillingExamplePage> {
 
   Future<void> _onSync() async {
     final authToken = _authTokenController.text.trim();
+    final payingPartyId = _payingPartyIdController.text.trim();
+    final baseUrl = _billingBaseUrlController.text.trim().isEmpty
+        ? _defaultBillingBaseUrl
+        : _billingBaseUrlController.text.trim();
     debugPrint('[BillingExample] Sync: token length=${authToken.length}');
     if (authToken.isEmpty) {
       _showError('Authorization token is required for sync.');
       return;
     }
+    BillingSdk.configure(billingApiBaseUrl: baseUrl);
     setState(() => _syncing = true);
-    debugPrint('[BillingExample] Sync: calling GET /api/billing/license…');
+    debugPrint(
+      '[BillingExample] Sync: calling GET /api/billing/license with X-Paying-Party-Id=${payingPartyId.isEmpty ? "none" : payingPartyId}…',
+    );
     final result = await BillingSdk.syncFromServer(
       authorizationToken: authToken,
+      payingPartyId: payingPartyId.isEmpty ? null : payingPartyId,
     );
 
     setState(() => _syncing = false);
@@ -233,6 +249,16 @@ class _BillingExamplePageState extends State<BillingExamplePage> {
               'Public key file path (optional)',
               style: Theme.of(context).textTheme.titleMedium,
             ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _billingBaseUrlController,
+              maxLines: 1,
+              decoration: const InputDecoration(
+                labelText: 'Billing base URL',
+                hintText: 'e.g. http://localhost:3000 or .../api/billing',
+                border: OutlineInputBorder(),
+              ),
+            ),
             const SizedBox(height: 4),
             Text(
               'Path to a .pem file containing the Billing API public key. File must contain -----BEGIN PUBLIC KEY----- and -----END PUBLIC KEY-----. Leave empty to use SDK default (test key only). Not supported on web.',
@@ -284,6 +310,15 @@ class _BillingExamplePageState extends State<BillingExamplePage> {
               obscureText: true,
             ),
             const SizedBox(height: 8),
+            TextField(
+              controller: _payingPartyIdController,
+              decoration: const InputDecoration(
+                labelText: 'X-Paying-Party-Id (optional)',
+                hintText: 'e.g. 123',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
             FilledButton(
               onPressed: _syncing ? null : _onSync,
               child: _syncing
@@ -304,7 +339,9 @@ class _BillingExamplePageState extends State<BillingExamplePage> {
   void dispose() {
     _tokenController.dispose();
     _authTokenController.dispose();
+    _payingPartyIdController.dispose();
     _publicKeyPathController.dispose();
+    _billingBaseUrlController.dispose();
     super.dispose();
   }
 }
