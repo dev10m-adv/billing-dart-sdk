@@ -29,18 +29,24 @@ class BillingTokenPayload {
   /// Parses from JWT payload map. Throws [FormatException] if required fields are missing/invalid.
   factory BillingTokenPayload.fromJson(Map<String, dynamic> json) {
     final version = parseInt(getKey(json, 'payload_version', 'payloadVersion'));
-    if (version == null) throw FormatException('payload_version (number) required.');
+    if (version == null)
+      throw FormatException('payload_version (number) required.');
     final exp = parseInt(json['exp']);
-    final expiresAt = exp != null ? dateTimeFromUnixSeconds(exp) : _defaultExpiresAt;
+    final expiresAt = exp != null
+        ? dateTimeFromUnixSeconds(exp)
+        : _defaultExpiresAt;
     final payingPartyRaw = getKey(json, 'paying_party', 'payingParty');
-    if (payingPartyRaw is! Map<String, dynamic>) throw FormatException('paying_party object required.');
+    if (payingPartyRaw is! Map<String, dynamic>)
+      throw FormatException('paying_party object required.');
     final payingParty = PayingParty.fromJson(payingPartyRaw);
     final subscriptionsRaw = json['subscriptions'];
-    if (subscriptionsRaw is! List) throw FormatException('subscriptions array required.');
+    if (subscriptionsRaw is! List)
+      throw FormatException('subscriptions array required.');
     final subscriptions = <BillingSubscription>[];
     for (var i = 0; i < subscriptionsRaw.length; i++) {
       final item = subscriptionsRaw[i];
-      if (item is! Map<String, dynamic>) throw FormatException('subscriptions[$i] must be an object.');
+      if (item is! Map<String, dynamic>)
+        throw FormatException('subscriptions[$i] must be an object.');
       subscriptions.add(BillingSubscription.fromJson(item));
     }
     final iat = parseInt(json['iat']);
@@ -63,7 +69,8 @@ class BillingTokenPayload {
       subscriptions.map((s) => s.subscriptionId).toList();
 
   /// Billing email from paying party.
-  String? get email => payingParty.billingEmail.isNotEmpty ? payingParty.billingEmail : null;
+  String? get email =>
+      payingParty.billingEmail.isNotEmpty ? payingParty.billingEmail : null;
 
   /// Active subscriptions only (status active or trialing).
   List<BillingSubscription> get activeSubscriptions =>
@@ -103,6 +110,10 @@ class BillingTokenPayload {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(payloadVersion, expiresAt, payingParty, Object.hashAll(subscriptions));
+  int get hashCode => Object.hash(
+    payloadVersion,
+    expiresAt,
+    payingParty,
+    Object.hashAll(subscriptions),
+  );
 }

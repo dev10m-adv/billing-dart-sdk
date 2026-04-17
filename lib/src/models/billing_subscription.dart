@@ -32,15 +32,28 @@ class BillingSubscription {
     final productName = getKey(json, 'product_name', 'productName');
     final status = getKey(json, 'subscription_status', 'subscriptionStatus');
     final validUntil = getKey(json, 'valid_until', 'validUntil');
-    if (subscriptionId is! String) throw FormatException('subscriptions[].subscription_id required.');
-    if (planId is! String) throw FormatException('subscriptions[].plan_id required.');
-    if (productId is! String) throw FormatException('subscriptions[].product_id required.');
-    if (planName is! String) throw FormatException('subscriptions[].plan_name required.');
-    if (productName is! String) throw FormatException('subscriptions[].product_name required.');
-    if (status is! String) throw FormatException('subscriptions[].subscription_status required.');
+    if (subscriptionId is! String)
+      throw FormatException('subscriptions[].subscription_id required.');
+    if (planId is! String)
+      throw FormatException('subscriptions[].plan_id required.');
+    if (productId is! String)
+      throw FormatException('subscriptions[].product_id required.');
+    if (planName is! String)
+      throw FormatException('subscriptions[].plan_name required.');
+    if (productName is! String)
+      throw FormatException('subscriptions[].product_name required.');
+    if (status is! String)
+      throw FormatException('subscriptions[].subscription_status required.');
     final validUntilInt = parseInt(validUntil);
-    if (validUntilInt == null) throw FormatException('subscriptions[].valid_until required (Unix timestamp).');
-    final assigned = getKey(json, 'assigned_user_party_id', 'assignedUserPartyId');
+    if (validUntilInt == null)
+      throw FormatException(
+        'subscriptions[].valid_until required (Unix timestamp).',
+      );
+    final assigned = getKey(
+      json,
+      'assigned_user_party_id',
+      'assignedUserPartyId',
+    );
     return BillingSubscription(
       subscriptionId: subscriptionId,
       planId: planId,
@@ -49,7 +62,9 @@ class BillingSubscription {
       productName: productName,
       subscriptionStatus: status,
       validUntil: dateTimeFromUnixSeconds(validUntilInt),
-      assignedUserPartyId: assigned is String && assigned.isNotEmpty ? assigned : null,
+      assignedUserPartyId: assigned is String && assigned.isNotEmpty
+          ? assigned
+          : null,
     );
   }
 

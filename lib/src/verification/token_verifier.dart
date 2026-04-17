@@ -34,20 +34,28 @@ class TokenVerifier {
       if (jwt == null) {
         final algHint = _jwtAlgFromToken(trimmed);
         if (algHint != null) {
-          BillingSdkLogger.warning('Token signed with alg=$algHint; SDK expects ES256 (EC key). Key must match signer.');
+          BillingSdkLogger.warning(
+            'Token signed with alg=$algHint; SDK expects ES256 (EC key). Key must match signer.',
+          );
         }
         return _failure(BillingTokenErrorReason.invalidSignature);
       }
 
       final payloadMap = jwt.payload;
       if (payloadMap is! Map<String, dynamic>) {
-        return _failure(BillingTokenErrorReason.missingClaims, detail: 'Expected a JSON object payload.');
+        return _failure(
+          BillingTokenErrorReason.missingClaims,
+          detail: 'Expected a JSON object payload.',
+        );
       }
       try {
         final payload = BillingTokenPayload.fromJson(payloadMap);
         return VerifySuccess(payload);
       } on FormatException catch (e) {
-        return _failure(BillingTokenErrorReason.missingClaims, detail: e.message);
+        return _failure(
+          BillingTokenErrorReason.missingClaims,
+          detail: e.message,
+        );
       }
     } on JWTExpiredException {
       return _failure(BillingTokenErrorReason.expired);
@@ -72,9 +80,15 @@ class TokenVerifier {
       if (parts.length < 2) return null;
       final padded = parts[0].replaceAll('-', '+').replaceAll('_', '/');
       switch (padded.length % 4) {
-        case 2: final b = utf8.decode(base64Url.decode('$padded==')); return _algFromHeaderJson(b);
-        case 3: final b = utf8.decode(base64Url.decode('$padded=')); return _algFromHeaderJson(b);
-        default: final b = utf8.decode(base64Url.decode(padded)); return _algFromHeaderJson(b);
+        case 2:
+          final b = utf8.decode(base64Url.decode('$padded=='));
+          return _algFromHeaderJson(b);
+        case 3:
+          final b = utf8.decode(base64Url.decode('$padded='));
+          return _algFromHeaderJson(b);
+        default:
+          final b = utf8.decode(base64Url.decode(padded));
+          return _algFromHeaderJson(b);
       }
     } catch (_) {
       return null;
@@ -92,13 +106,16 @@ class TokenVerifier {
 
   VerifyFailure _failure(BillingTokenErrorReason reason, {String? detail}) {
     var message = _userMessage(reason);
-    if (reason == BillingTokenErrorReason.missingClaims && detail != null && detail.isNotEmpty) {
+    if (reason == BillingTokenErrorReason.missingClaims &&
+        detail != null &&
+        detail.isNotEmpty) {
       message = '$message $detail';
     }
-    BillingSdkLogger.error('Token verification failed', 'reason=$reason — $message');
-    return VerifyFailure(
-      BillingTokenError(message: message, reason: reason),
+    BillingSdkLogger.error(
+      'Token verification failed',
+      'reason=$reason — $message',
     );
+    return VerifyFailure(BillingTokenError(message: message, reason: reason));
   }
 
   BillingTokenErrorReason _reasonFromMessage(String message) {
@@ -133,5 +150,4 @@ class TokenVerifier {
             : 'Invalid token. It may have been copied incorrectly.',
     };
   }
-
 }

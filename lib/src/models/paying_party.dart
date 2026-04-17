@@ -12,8 +12,10 @@ class PayingParty {
   });
 
   final String id;
+
   /// IdP name (e.g. "google", "microsoft").
   final String identityProvider;
+
   /// Subject ID from the identity provider.
   final String identitySubject;
   final String billingEmail;
@@ -26,12 +28,18 @@ class PayingParty {
   /// Accepts current schema (identity_provider, identity_subject) or legacy sso_id.
   factory PayingParty.fromJson(Map<String, dynamic> json) {
     final id = getKey(json, 'id', 'id');
-    final identityProvider = getKey(json, 'identity_provider', 'identityProvider');
+    final identityProvider = getKey(
+      json,
+      'identity_provider',
+      'identityProvider',
+    );
     final identitySubject = getKey(json, 'identity_subject', 'identitySubject');
     final ssoIdLegacy = getKey(json, 'sso_id', 'ssoId');
     final billingEmail = getKey(json, 'billing_email', 'billingEmail');
-    if (id is! String || id.isEmpty) throw FormatException('paying_party.id required.');
-    if (billingEmail is! String) throw FormatException('paying_party.billing_email required.');
+    if (id is! String || id.isEmpty)
+      throw FormatException('paying_party.id required.');
+    if (billingEmail is! String)
+      throw FormatException('paying_party.billing_email required.');
     final provider = identityProvider is String && identityProvider.isNotEmpty
         ? identityProvider
         : (ssoIdLegacy is String && ssoIdLegacy.isNotEmpty ? 'legacy' : null);
@@ -64,6 +72,11 @@ class PayingParty {
           organizationName == other.organizationName;
 
   @override
-  int get hashCode =>
-      Object.hash(id, identityProvider, identitySubject, billingEmail, organizationName);
+  int get hashCode => Object.hash(
+    id,
+    identityProvider,
+    identitySubject,
+    billingEmail,
+    organizationName,
+  );
 }
