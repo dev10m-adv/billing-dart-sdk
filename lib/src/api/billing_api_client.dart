@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
-import 'package:billing_flutter_sdk/src/logging/sdk_logger.dart';
 import 'package:http/http.dart' as http;
+
+import '../logging/sdk_logger.dart';
+import '../models/payment_method.dart';
 
 /// Result of syncing from the Billing API.
 sealed class SyncResult {}
@@ -38,7 +40,8 @@ String normalizeBillingApiBaseUrl(String input) {
 /// HTTP client for the Billing API (sync and optional public-key fetch).
 class BillingApiClient {
   BillingApiClient({required String baseUrl})
-    : _baseUrl = _originWithTrailingSlash(normalizeBillingApiBaseUrl(baseUrl));
+      : _baseUrl =
+            _originWithTrailingSlash(normalizeBillingApiBaseUrl(baseUrl));
 
   final String _baseUrl;
 
@@ -88,14 +91,23 @@ class BillingApiClient {
 
         final rawData = body?['data'];
         final data = rawData is Map<String, dynamic> ? rawData : body;
-        final signed = data?['signedToken'] ?? data?['signed_token'] ?? data?['token'];
+        final signed =
+            data?['signedToken'] ?? data?['signed_token'] ?? data?['token'];
 
         if (signed is String && signed.isNotEmpty) {
-          BillingSdkLogger.success('fetchLicense: received signed token', '${signed.length} chars');
+          BillingSdkLogger.success(
+            'fetchLicense: received signed token',
+            '${signed.length} chars',
+          );
           return SyncSuccess(signedToken: signed);
         }
 
-        BillingSdkLogger.error('fetchLicense: 200 but no signedToken in response', response.body.length > 200 ? '${response.body.substring(0, 200)}...' : response.body);
+        BillingSdkLogger.error(
+          'fetchLicense: 200 but no signedToken in response',
+          response.body.length > 200
+              ? '${response.body.substring(0, 200)}...'
+              : response.body,
+        );
         return const SyncFailure(
           message: 'Sync failed. Invalid response from server.',
         );
@@ -128,12 +140,62 @@ class BillingApiClient {
         );
       }
 
-      BillingSdkLogger.error('fetchLicense: unexpected status', '${response.statusCode}');
+      BillingSdkLogger.error(
+        'fetchLicense: unexpected status',
+        '${response.statusCode}',
+      );
       return const SyncFailure(message: 'Sync failed. Try again later.');
     } catch (e, st) {
       BillingSdkLogger.error('fetchLicense: request failed', '$e');
-      developer.log('fetchLicense stack', name: 'BillingSdk', level: 1000, error: e, stackTrace: st);
+      developer.log(
+        'fetchLicense stack',
+        name: 'BillingSdk',
+        level: 1000,
+        error: e,
+        stackTrace: st,
+      );
       return const SyncFailure(message: 'Sync failed. Try again later.');
+    }
+  }
+
+  /// GET `{origin}/api/billing/payment-methods` — returns the list of saved
+  /// payment methods for the authenticated user.
+  ///
+  /// Returns an empty list on any non-200 or parse error so callers can always
+  /// safely iterate the result.
+  Future<List<PaymentMethod>> fetchPaymentMethods({
+    required String authorizationToken,
+  }) async {
+    final raw = authorizationToken.trim();
+    if (raw.isEmpty) {
+      BillingSdkLogger.warning('fetchPaymentMethods: token empty');
+      return [];
+    }
+    final token = raw.toLowerCase().startsWith('bearer ') ? raw : 'Bearer $raw';
+    final uri = Uri.parse('${_baseUrl}api/billing/payment-methods');
+
+    BillingSdkLogger.info('fetchPaymentMethods: GET', uri.toString());
+
+    try {
+      final response = await http.get(uri, headers: {'Authorization': token});
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final list = body is List
+            ? body
+            : (body is Map ? (body['data'] as List?) ?? [] : []);
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map(PaymentMethod.fromJson)
+            .toList();
+      }
+      BillingSdkLogger.error(
+        'fetchPaymentMethods: unexpected status',
+        '${response.statusCode}',
+      );
+      return [];
+    } catch (e) {
+      BillingSdkLogger.error('fetchPaymentMethods: request failed', '$e');
+      return [];
     }
   }
 }

@@ -1,138 +1,260 @@
-# Billing Flutter SDK
+# billing_sdk
 
-Flutter SDK for billing token verification, in-memory entitlements, sync from the Billing API, and paste-and-verify flows. For client-only apps (e.g. Scomm); the only backend is the Billing API.
+A generic, extensible Dart SDK for the **Package Billing API**.
 
 ---
 
 ## Features
 
-- **Init** – Decode saved signed JWT on app start and keep payload in memory for add-on checks.
-- **Sync** – Sync billing from the server (GET /api/billing/license) with required authorization token.
-- **Paste + verify** – Verify pasted token and expose payload (or a user-facing error) so the app can persist and show notifications.
+| Domain | Coverage |
+|---|---|
+| Health | `check()` |
+| Checkout | `createSession`, `fulfillSession` |
+| Paying Parties | CRUD + `enableStripe`, `enablePayPal`, `getVacantSeats` |
+| Products | CRUD |
+| Plans | CRUD + `getPricings` |
+| Subscriptions | CRUD + seat management (add, remove, assign, unassign, transfer) |
+| Invoices | CRUD + finalize, mark-sent, generate recurring/proration, list by subscription/party |
+| Tax Rules | CRUD + `getApplicable`, `calculate`, `getInvoiceTaxes` |
+| Affiliates | CRUD + `getPromoCodes`, `getCommissions` |
+| Promo Codes | CRUD + `validate` |
+| Commissions | list, `updateStatus` |
+| Payment Methods | list, `setDefault`, `remove` |
+| License | `getBillingLicense` |
 
 ---
 
 ## Installation
 
-Add the package to your app’s `pubspec.yaml`:
+Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  billing_flutter_sdk:
-    path: ../billing_flutter_sdk   # or your path / git ref
-```
-
-Then run:
-
-```bash
-flutter pub get
+  billing_sdk:
+    path: ./billing_sdk   # or point at your git repo / pub package
+  http: ^1.2.0
 ```
 
 ---
 
-## Setup
-
-1. **Configure** the SDK once (e.g. at app startup), before any other calls.
-
-   **Recommended:** Embed the Billing API public key as an asset so it is included in the build. Add the `.pem` file to your `pubspec.yaml` under `flutter: assets:`. Use a path that does **not** start with `assets/` (e.g. `keys/billing_public.pem`) so Flutter web does not double-prefix the URL:
+## Quick Start
 
 ```dart
-import 'package:billing_flutter_sdk/billing_flutter_sdk.dart';
+import 'package:billing_sdk/billing_sdk.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await BillingSdk.configureWithAsset(
-    billingApiBaseUrl: 'https://billing.example.com',
-    publicKeyAsset: 'keys/billing_public.pem',
-  );
-  runApp(MyApp());
-}
-```
-
-   The asset content is validated (must contain `-----BEGIN PUBLIC KEY-----` and `-----END PUBLIC KEY-----`). Alternatively use [configure](#configuration) with `publicKeyPem` or `publicKeyPath`.
-
-2. **Init** on app start with the saved token from your storage (e.g. secure storage). If you have no token yet, pass `null`.
-
-```dart
-// In your app’s init flow (e.g. after reading from secure storage)
-final savedToken = await storage.readBillingToken(); // your code
-BillingSdk.init(savedToken);
-```
-
----
-
-## Usage
-
-### Add-on checks
-
-After `init` (or after a successful sync/verify), use the current payload for entitlements:
-
-```dart
-final payload = BillingSdk.getPayload();
-if (payload != null && payload.hasSubscription('sub_premium')) {
-  // Show premium feature
-}
-```
-
-### Sync from server
-
-Call when the user taps “Sync billing”. Only the authorization token is required (Bearer or SSO token). GET /api/billing/license with no query params.
-
-```dart
-final result = await BillingSdk.syncFromServer(
-  authorizationToken: userAuthToken, // required
+final billing = BillingClient(
+  baseUrl: 'https://api.example.com/api/billing',
+  tokenProvider: () async => await authService.getToken(),
 );
-switch (result) {
-  case SyncSuccess():
-    // Optionally persist the new token; payload is already in memory
-  case SyncFailure(:final message):
-    // Show message in a snackbar or dialog
-}
-```
 
-### Paste + verify
+// List active monthly plans (public endpoint – no token needed)
+final plans = await billing.plans.list(billingInterval: 'monthly', isActive: true);
 
-When the user pastes a token (e.g. from the billing portal):
+// Create a paying party
+final party = await billing.payingParties.create(
+  CreatePayingPartyRequest(
+    identityProvider: 'auth0',
+    identitySubject: 'auth0|user123',
+    billingEmail: 'billing@acme.com',
+  ),
+);
 
-```dart
-final result = BillingSdk.verifyAndDecode(pastedJson);
-switch (result) {
-  case VerifySuccess(:final payload):
-    // Persist pastedJson (and/or payload) for init on next launch
-  case VerifyFailure(:final error):
-    // Show error.message in an error notification
-}
+billing.dispose(); // release HTTP client
 ```
 
 ---
 
 ## Configuration
 
-| Option | Description |
-|--------|-------------|
-| `billingApiBaseUrl` | Base URL of the Billing API (required for `syncFromServer`). |
-| `publicKeyPem` | EC public key PEM (ES256) to verify JWTs. If omitted, the SDK uses an embedded default; **set from your Billing API in production.** |
-| `publicKeyPath` | Path to a `.pem` file on disk. The file is read and validated (must contain `-----BEGIN PUBLIC KEY-----` and `-----END PUBLIC KEY-----`). Not supported on web; use `publicKeyPem` or asset there. |
-| **Asset (recommended)** | Call `BillingSdk.configureWithAsset(publicKeyAsset: 'keys/billing_public.pem')` (or `loadPublicKeyFromAsset` then `configure`). Use a path that does not start with `assets/` (e.g. `keys/`) so web works. Add the `.pem` to `pubspec.yaml` under `flutter: assets:`. Same PEM validation applies. |
+### `BillingClient` constructor
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `baseUrl` | `String` | **required** | Full base URL e.g. `http://localhost:3000/api/billing` |
+| `tokenProvider` | `Future<String?> Function()?` | `null` | Called before every authenticated request |
+| `httpClient` | `http.Client?` | auto | Supply a mock client for tests |
+| `defaultHeaders` | `Map<String, String>` | `{}` | Extra headers on every request |
 
 ---
 
-## Important
+## Error Handling
 
-- **Persistence** – The SDK does not persist tokens. Your app must save/load the raw token and pass it to `init` on launch.
-- **Errors** – The SDK returns user-facing messages (`BillingTokenError.message`, `SyncFailure.message`). Your app should show them (e.g. snackbar, dialog).
-
----
-
-## Development
-
-From the SDK project root:
-
-```bash
-flutter pub get
-flutter test
-flutter run
+```dart
+try {
+  final invoice = await billing.invoices.get(999);
+} on BillingApiException catch (e) {
+  // HTTP 4xx / 5xx
+  print('${e.statusCode}: ${e.message}');
+  print(e.body); // raw response body map
+} on BillingNetworkException catch (e) {
+  // connectivity / timeout
+  print(e.message);
+}
 ```
 
-- **[PLAN.md](PLAN.md)** – Development plan, API contract, and Billing API alignment.
-- **[CODE_REVIEW.md](CODE_REVIEW.md)** – Code review flow and reviewer checklist.
+---
+
+## Services
+
+### `billing.health`
+```dart
+final status = await billing.health.check();
+// HealthStatus(status: 'ok', timestamp: '...')
+```
+
+### `billing.checkout`
+```dart
+final session = await billing.checkout.createSession(
+  CreateCheckoutSessionRequest(planId: 1, pricingId: 1,
+      successUrl: 'https://app.com/ok', cancelUrl: 'https://app.com/cancel'),
+);
+// Redirect user to session.url
+
+// Local dev only:
+await billing.checkout.fulfillSession(FulfillCheckoutRequest(
+  sessionId: 'cs_test_abc', paymentMethodId: 'pm_123',
+  customerId: 'cus_123', chargeId: 'ch_123', status: 'paid',
+));
+```
+
+### `billing.payingParties`
+```dart
+final party  = await billing.payingParties.create(CreatePayingPartyRequest(...));
+final party  = await billing.payingParties.getById(1);
+final party  = await billing.payingParties.getByIdentity('auth0', 'auth0|user123');
+final party  = await billing.payingParties.update(1, UpdatePayingPartyRequest(gracePeriodDays: 7));
+await billing.payingParties.enableStripe(1, 'cus_stripe_abc');
+await billing.payingParties.enablePayPal(1, 'B-paypal_abc');
+final seats  = await billing.payingParties.getVacantSeats(1);
+```
+
+### `billing.products`
+```dart
+final list   = await billing.products.list(includeInactive: false);
+final p      = await billing.products.get(1);
+final p      = await billing.products.create(CreateProductRequest(name: 'Pro'));
+final p      = await billing.products.update(1, UpdateProductRequest(name: 'Pro v2'));
+await billing.products.delete(1);
+```
+
+### `billing.plans`
+```dart
+final list      = await billing.plans.list(productId: 1, billingInterval: 'monthly');
+final plan      = await billing.plans.get(1);
+final pricings  = await billing.plans.getPricings(1);
+final plan      = await billing.plans.create(CreatePlanRequest(...));
+final plan      = await billing.plans.update(1, UpdatePlanRequest(basePrice: 59.99));
+await billing.plans.delete(1);
+```
+
+### `billing.subscriptions`
+```dart
+final summary  = await billing.subscriptions.getMeBillingSummary();
+final list     = await billing.subscriptions.listMine();
+final sub      = await billing.subscriptions.get(1);
+final sub      = await billing.subscriptions.create(CreateSubscriptionRequest(...));
+final sub      = await billing.subscriptions.update(1, UpdateSubscriptionRequest(status: 'active'));
+
+// Seat management
+final seat     = await billing.subscriptions.addSeat(AddSeatRequest(planId: 1, pricingId: 1));
+await billing.subscriptions.removeSeat(seatId);
+final sub      = await billing.subscriptions.assignUser(1, AssignSeatRequest(...));
+final sub      = await billing.subscriptions.unassignUser(1);
+final sub      = await billing.subscriptions.transferSeat(1, TransferSeatRequest(...));
+```
+
+### `billing.invoices`
+```dart
+final list     = await billing.invoices.listMine(status: 'paid');
+final inv      = await billing.invoices.get(1);
+final inv      = await billing.invoices.create(CreateInvoiceRequest(...));
+final inv      = await billing.invoices.update(1, UpdateInvoiceRequest(status: 'paid'));
+final inv      = await billing.invoices.finalize(1);    // DRAFT → PENDING
+final inv      = await billing.invoices.markSent(1);   // PENDING → PROCESSING
+final inv      = await billing.invoices.generateRecurring(subscriptionId);
+final inv      = await billing.invoices.generateProration(GenerateProrationRequest(...));
+final list     = await billing.invoices.listBySubscription(1);
+final list     = await billing.invoices.listByPayingParty(1);
+```
+
+### `billing.taxRules`
+```dart
+final list     = await billing.taxRules.list(scope: 'region');
+final applic   = await billing.taxRules.getApplicable(jurisdiction: 'US-CA');
+final rule     = await billing.taxRules.get(1);
+final rule     = await billing.taxRules.create(CreateTaxRuleRequest(...));
+final rule     = await billing.taxRules.update(1, UpdateTaxRuleRequest(rateValue: 9.0));
+final result   = await billing.taxRules.calculate(CalculateTaxesRequest(...));
+final taxes    = await billing.taxRules.getInvoiceTaxes(invoiceId);
+```
+
+### `billing.affiliates`
+```dart
+final list     = await billing.affiliates.list();
+final aff      = await billing.affiliates.get(1);
+final aff      = await billing.affiliates.create(CreateAffiliateRequest(...));
+final aff      = await billing.affiliates.update(1, UpdateAffiliateRequest(...));
+final codes    = await billing.affiliates.getPromoCodes(1);
+final comms    = await billing.affiliates.getCommissions(1, status: 'pending');
+```
+
+### `billing.promoCodes`
+```dart
+final list     = await billing.promoCodes.list(affiliateId: 1);
+final code     = await billing.promoCodes.getByCode('SAVE20');
+final code     = await billing.promoCodes.getById(1);
+final result   = await billing.promoCodes.validate('SAVE20');
+final code     = await billing.promoCodes.create(CreatePromoCodeRequest(...));
+final code     = await billing.promoCodes.update(1, UpdatePromoCodeRequest(...));
+```
+
+### `billing.commissions`
+```dart
+final list     = await billing.commissions.list(status: 'pending');
+final comm     = await billing.commissions.updateStatus(1,
+    UpdateCommissionStatusRequest(status: 'paid', paidAt: '2026-05-12T12:00:00Z'));
+```
+
+### `billing.paymentMethods`
+```dart
+final list     = await billing.paymentMethods.list();
+await billing.paymentMethods.setDefault(1);
+await billing.paymentMethods.remove(1);
+```
+
+### `billing.license`
+```dart
+final lic      = await billing.license.getBillingLicense();
+print(lic.signedToken); // JWT
+```
+
+---
+
+## Testing
+
+```dart
+import 'package:http/testing.dart';
+import 'package:billing_sdk/billing_sdk.dart';
+
+final mockClient = MockClient((request) async {
+  return Response('{"status":"ok","timestamp":"2026-05-14T00:00:00Z"}', 200);
+});
+
+final billing = BillingClient(
+  baseUrl: 'http://localhost',
+  httpClient: mockClient,
+);
+final health = await billing.health.check();
+```
+
+---
+
+## Extending the SDK
+
+Each service is a plain Dart class. To add a new endpoint:
+
+1. Add a model class to `lib/src/models/models.dart`.
+2. Add a method to the relevant service in `lib/src/services/services.dart`.
+3. Re-export if needed from `lib/billing_sdk.dart`.
+
+The `BillingHttpClient` provides `get`, `post`, `patch`, `delete` — all new endpoints follow the same pattern.

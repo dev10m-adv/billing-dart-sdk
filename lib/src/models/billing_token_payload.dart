@@ -32,9 +32,8 @@ class BillingTokenPayload {
     if (version == null)
       throw FormatException('payload_version (number) required.');
     final exp = parseInt(json['exp']);
-    final expiresAt = exp != null
-        ? dateTimeFromUnixSeconds(exp)
-        : _defaultExpiresAt;
+    final expiresAt =
+        exp != null ? dateTimeFromUnixSeconds(exp) : _defaultExpiresAt;
     final payingPartyRaw = getKey(json, 'paying_party', 'payingParty');
     if (payingPartyRaw is! Map<String, dynamic>)
       throw FormatException('paying_party object required.');
@@ -98,22 +97,20 @@ class BillingTokenPayload {
           runtimeType == other.runtimeType &&
           payloadVersion == other.payloadVersion &&
           expiresAt == other.expiresAt &&
+          issuedAt == other.issuedAt &&
+          issuer == other.issuer &&
+          audience == other.audience &&
           payingParty == other.payingParty &&
-          _listEquals(subscriptions, other.subscriptions);
-
-  static bool _listEquals<T>(List<T> a, List<T> b) {
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
+          subscriptions == other.subscriptions;
 
   @override
   int get hashCode => Object.hash(
-    payloadVersion,
-    expiresAt,
-    payingParty,
-    Object.hashAll(subscriptions),
-  );
+        payloadVersion,
+        expiresAt,
+        issuedAt,
+        issuer,
+        audience,
+        payingParty,
+        subscriptions,
+      );
 }

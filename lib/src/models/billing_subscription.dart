@@ -62,9 +62,8 @@ class BillingSubscription {
       productName: productName,
       subscriptionStatus: status,
       validUntil: dateTimeFromUnixSeconds(validUntilInt),
-      assignedUserPartyId: assigned is String && assigned.isNotEmpty
-          ? assigned
-          : null,
+      assignedUserPartyId:
+          assigned is String && assigned.isNotEmpty ? assigned : null,
     );
   }
 
