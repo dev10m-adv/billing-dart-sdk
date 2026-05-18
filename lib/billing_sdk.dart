@@ -17,3 +17,6 @@ export 'src/entitlements/addon_entitlements.dart';
 export 'src/verification/token_verifier.dart';
 export 'src/api/billing_api_client.dart';
 export 'src/logging/sdk_logger.dart';
+
+// Card validation (pure Dart — no Flutter dependency)
+export 'src/validation/card_validator.dart';
